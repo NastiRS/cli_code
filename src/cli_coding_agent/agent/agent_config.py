@@ -1,11 +1,26 @@
 from typing import Dict, Any, Optional, List
+from pydantic_settings import BaseSettings
 
 
-class AgentConfig:
-    """Configuración del agente de código"""
+class AgentConfigSettings(BaseSettings):
+    """Configuración del agente de código utilizando Pydantic Settings"""
+
+    # API keys
+    ANTHROPIC_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+
+    # Configuración de base de datos
+    DB_FILE: str = "database/code_agent.db"
+    TABLE_NAME: str = "code_agent"
 
     # Modelo base a utilizar
-    DEFAULT_MODEL_ID: str = "claude-3-7-sonnet-latest"
+    DEFAULT_MODEL_ID: str = "claude-sonnet-4-20250514"
+
+    # Número de interacciones de historial a incluir en cada consulta
+    NUM_HISTORY_RUNS: int = 10
+
+    # Temperatura para el modelo (determinismo vs. creatividad)
+    TEMPERATURE: float = 0.7
 
     # Instrucciones generales para el agente
     AGENT_INSTRUCTIONS: str = """Eres un asistente de programación experto que ayuda con código Python.
@@ -21,11 +36,13 @@ class AgentConfig:
     8. Cuando uses herramientas, NO anuncies que vas a utilizarlas (evita frases como "voy a utilizar la herramienta X"). Simplemente úsalas y responde directamente con el resultado obtenido.
     """
 
-    # Número de interacciones de historial a incluir en cada consulta
-    NUM_HISTORY_RUNS: int = 10
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
-    # Temperatura para el modelo (determinismo vs. creatividad)
-    TEMPERATURE: float = 0.7
+
+class AgentConfig(AgentConfigSettings):
+    """Clase que extiende la configuración con métodos adicionales"""
 
     # Configuración adicional que se puede pasar al modelo
     def get_model_config(self) -> Dict[str, Any]:

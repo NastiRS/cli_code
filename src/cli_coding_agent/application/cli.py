@@ -9,12 +9,12 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.live import Live
 
-from src.cli_coding_agent.config import settings
 from src.cli_coding_agent.utils.env_checker import check_env_file
 from src.cli_coding_agent.adapters.storage.sqlite_adapter import SQLiteAdapter
 from src.cli_coding_agent.adapters.claude_adapter import ClaudeAdapter
 from src.cli_coding_agent.application.chat_service import ChatService
 from src.cli_coding_agent.agent import CodeAgent
+from src.cli_coding_agent.agent.agent_config import agent_config
 
 
 app = typer.Typer(help="Chat con el agente de código")
@@ -24,8 +24,8 @@ console = Console()
 def get_chat_service(
     session_id: Optional[str] = None,
     nuevo: bool = False,
-    db_file: str = settings.DB_FILE,
-    table_name: str = settings.TABLE_NAME,
+    db_file: str = agent_config.DB_FILE,
+    table_name: str = agent_config.TABLE_NAME,
     command_type: Literal["chat", "other"] = "other",
 ) -> ChatService:
     """
@@ -45,7 +45,7 @@ def get_chat_service(
     """
     storage = SQLiteAdapter(db_file=db_file, table_name=table_name)
     model = ClaudeAdapter(
-        model_id=settings.MODEL_ID, api_key=settings.ANTHROPIC_API_KEY
+        model_id=agent_config.DEFAULT_MODEL_ID, api_key=agent_config.ANTHROPIC_API_KEY
     )
 
     # Si es una solicitud para una nueva sesión, ignoramos cualquier ID previo
@@ -56,9 +56,9 @@ def get_chat_service(
     return ChatService(
         storage=storage,
         ai_model=model,
-        instructions=settings.AGENT_INSTRUCTIONS,
+        instructions=agent_config.AGENT_INSTRUCTIONS,
         session_id=session_id,
-        num_history_runs=settings.NUM_HISTORY_RUNS,
+        num_history_runs=agent_config.NUM_HISTORY_RUNS,
         command_type=command_type,
     )
 
@@ -66,8 +66,8 @@ def get_chat_service(
 def get_code_agent(
     session_id: Optional[str] = None,
     nuevo: bool = False,
-    db_file: str = settings.DB_FILE,
-    table_name: str = settings.TABLE_NAME,
+    db_file: str = agent_config.DB_FILE,
+    table_name: str = agent_config.TABLE_NAME,
     with_tools: bool = False,
     command_type: Literal["chat", "other"] = "other",
 ) -> CodeAgent:
@@ -98,9 +98,9 @@ def get_code_agent(
         agent = CodeAgent(
             session_id="temp_"
             + str(sys.maxsize),  # ID temporal que no debería colisionar
-            model_id=settings.MODEL_ID,
-            api_key=settings.ANTHROPIC_API_KEY,
-            instructions=settings.AGENT_INSTRUCTIONS,
+            model_id=agent_config.DEFAULT_MODEL_ID,
+            api_key=agent_config.ANTHROPIC_API_KEY,
+            instructions=agent_config.AGENT_INSTRUCTIONS,
             db_file=db_file,
             table_name=table_name,
             with_tools=with_tools,
@@ -109,9 +109,9 @@ def get_code_agent(
         # Crear un agente normal
         agent = CodeAgent(
             session_id=session_id,
-            model_id=settings.MODEL_ID,
-            api_key=settings.ANTHROPIC_API_KEY,
-            instructions=settings.AGENT_INSTRUCTIONS,
+            model_id=agent_config.DEFAULT_MODEL_ID,
+            api_key=agent_config.ANTHROPIC_API_KEY,
+            instructions=agent_config.AGENT_INSTRUCTIONS,
             db_file=db_file,
             table_name=table_name,
             with_tools=with_tools,
@@ -127,10 +127,10 @@ def chat(
     ),
     nuevo: bool = typer.Option(False, "--nuevo", "-n", help="Iniciar nueva sesión"),
     db_file: str = typer.Option(
-        settings.DB_FILE, "--db", help="Archivo de base de datos"
+        agent_config.DB_FILE, "--db", help="Archivo de base de datos"
     ),
     table_name: str = typer.Option(
-        settings.TABLE_NAME, "--table", help="Nombre de tabla"
+        agent_config.TABLE_NAME, "--table", help="Nombre de tabla"
     ),
     exit_words: List[str] = typer.Option(
         ["salir", "exit", "quit"], help="Palabras para salir"
@@ -155,8 +155,9 @@ def chat(
     # Comandos especiales
     comandos = {
         "/ayuda": "Muestra esta ayuda",
-        "/salir": "Salir del chat",
+        "/bye": "Salir del chat",
         "/id": "Muestra el ID de la sesión actual",
+        "/switch ID_SESION": "Cambia a la sesión especificada",
     }
 
     console.print(
@@ -164,7 +165,8 @@ def chat(
             f"[bold]Asistente de Código[/bold]\n"
             f"ID de sesión: {agent.session_id}\n"
             f"Escribe '/ayuda' para ver comandos disponibles\n"
-            f"Escribe 'exit', 'quit' o 'salir' para terminar el chat",
+            f"Escribe '/bye' para terminar el chat\n"
+            f"Usa '/switch ID_SESION' para cambiar a otra sesión",
             title="Bienvenido",
             border_style="green",
         )
@@ -180,7 +182,8 @@ def chat(
 
             # Procesar comandos especiales
             if message.startswith("/"):
-                comando = message.split()[0].lower()
+                comando_completo = message.lower()
+                comando = comando_completo.split()[0].lower()
 
                 if comando == "/ayuda":
                     table = Table(title="Comandos disponibles")
@@ -193,7 +196,7 @@ def chat(
                     console.print(table)
                     continue
 
-                elif comando == "/salir":
+                elif comando == "/bye":
                     console.print("[bold green]¡Hasta luego![/bold green]")
                     break
 
@@ -201,16 +204,63 @@ def chat(
                     console.print(f"[bold]ID de sesión:[/bold] {agent.session_id}")
                     continue
 
+                elif comando == "/switch" and len(message.split()) > 1:
+                    # Obtener el ID de sesión
+                    target_session_id = message.split()[1]
+
+                    try:
+                        # Cargar la sesión
+                        agent.load_session(target_session_id)
+                        console.print(
+                            f"[bold green]Cambiado a la sesión:[/bold green] {target_session_id}"
+                        )
+
+                        # Verificar que se haya cargado correctamente
+                        if agent.session_id != target_session_id:
+                            console.print(
+                                "[bold red]¡Error! No se actualizó el ID de sesión correctamente.[/bold red]"
+                            )
+                            continue
+
+                        # Obtener mensajes para confirmar que se cargó la memoria
+                        try:
+                            # Usar get_messages_for_session en lugar de get_messages
+                            mensajes = agent.agent.get_messages_for_session(
+                                target_session_id
+                            )
+                            if mensajes and len(mensajes) > 0:
+                                console.print(
+                                    "[bold green]Memoria del agente actualizada correctamente.[/bold green]"
+                                )
+                                console.print(
+                                    f"[bold]Mensajes cargados:[/bold] {len(mensajes)}"
+                                )
+                            else:
+                                console.print(
+                                    "[bold yellow]Sesión cargada, pero no contiene mensajes previos.[/bold yellow]"
+                                )
+                        except Exception as e:
+                            console.print(
+                                f"[bold yellow]Sesión cargada, pero no se pudieron verificar los mensajes: {str(e)}[/bold yellow]"
+                            )
+
+                        if agent.session_name:
+                            console.print(
+                                f"[bold]Nombre de la sesión:[/bold] {agent.session_name}"
+                            )
+
+                        continue
+                    except Exception as e:
+                        console.print(
+                            f"[bold red]Error al cambiar de sesión: {str(e)}[/bold red]"
+                        )
+                        continue
+
                 else:
                     console.print(
                         f"[bold red]Comando desconocido: {comando}[/bold red]"
                     )
                     continue
-
-            # Salir si se usa una palabra de salida
-            if message.lower() in exit_words:
-                console.print("[bold green]¡Hasta luego![/bold green]")
-                break
 
             # Si es el primer mensaje, establecer el nombre de la sesión
             if es_primer_mensaje:
@@ -246,10 +296,10 @@ def chat(
 @app.command()
 def session(
     db_file: str = typer.Option(
-        settings.DB_FILE, "--db", help="Archivo de base de datos"
+        agent_config.DB_FILE, "--db", help="Archivo de base de datos"
     ),
     table_name: str = typer.Option(
-        settings.TABLE_NAME, "--table", help="Nombre de tabla"
+        agent_config.TABLE_NAME, "--table", help="Nombre de tabla"
     ),
     list_sessions: bool = typer.Option(
         False, "--list", "-l", help="Listar todas las sesiones"
