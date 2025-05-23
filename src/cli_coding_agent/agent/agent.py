@@ -9,7 +9,7 @@ from agno.models.anthropic import Claude
 from agno.storage.sqlite import SqliteStorage
 
 from src.cli_coding_agent.agent.agent_config import agent_config
-from src.cli_coding_agent.agent.tools.agno_tools import ALL_TOOLS
+from src.cli_coding_agent.agent.tools.tools import ALL_TOOLS
 
 
 class CodeAgent:
@@ -23,9 +23,12 @@ class CodeAgent:
         model_id: Optional[str] = None,
         api_key: Optional[str] = None,
         instructions: Optional[str] = None,
-        db_file: str = "database/code_agent.db",
-        table_name: str = "code_agent",
+        db_file: Optional[str] = None,
+        table_name: Optional[str] = None,
         with_tools: bool = False,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
     ):
         """
         Inicializa el agente de código.
@@ -33,47 +36,52 @@ class CodeAgent:
         Args:
             session_id: ID de sesión opcional. Si no se proporciona, se crea uno nuevo.
             model_id: ID del modelo a utilizar. Si no se proporciona, se usa el predeterminado.
-            api_key: Clave API para el modelo. Requerida.
+            api_key: Clave API para el modelo. Si no se proporciona, se toma de la configuración.
             instructions: Instrucciones personalizadas para el agente.
             db_file: Ruta al archivo de base de datos SQLite.
             table_name: Nombre de la tabla en la base de datos.
             with_tools: Si se deben habilitar las herramientas para el agente.
+            temperature: Temperatura del modelo.
+            max_tokens: Máximo número de tokens.
+            top_p: Valor top_p para el modelo.
         """
-        # Generar o usar el ID de sesión proporcionado
+
         self.session_id = session_id or str(uuid.uuid4())
         self.session_name = None
 
-        # Usar modelo e instrucciones predeterminados si no se proporcionan
-        self.model_id = model_id or agent_config.DEFAULT_MODEL_ID
-        self.instructions = instructions or agent_config.AGENT_INSTRUCTIONS
+        self.model_id = agent_config.DEFAULT_MODEL_ID
+        self.instructions = agent_config.AGENT_INSTRUCTIONS
+        self.db_file = agent_config.DB_FILE
+        self.table_name = agent_config.TABLE_NAME
+        self.temperature = agent_config.TEMPERATURE
+        self.max_tokens = agent_config.MAX_TOKENS
+        self.top_p = agent_config.TOP_P
+        self.api_key = agent_config.ANTHROPIC_API_KEY
 
-        # Validar clave API
-        if not api_key:
-            raise ValueError("Se requiere una clave API para el modelo.")
-        self.api_key = api_key
+        if not self.api_key:
+            raise ValueError(
+                "Se requiere una clave API para el modelo. Proporcione api_key o configure ANTHROPIC_API_KEY en el archivo .env"
+            )
 
-        # Almacenamiento de sesiones
-        self.db_file = db_file
-        self.table_name = table_name
-
-        # Determinar si se usan herramientas
         self.with_tools = with_tools
 
-        # Inicializar el agente de Agno
         self._initialize_agent()
 
     def _initialize_agent(self):
         """Inicializa el agente interno de Agno con la configuración adecuada."""
-        # Crear el modelo Claude
-        model = Claude(id=self.model_id, api_key=self.api_key)
+        model = Claude(
+            id=self.model_id,
+            api_key=self.api_key,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            top_p=self.top_p,
+        )
 
-        # Crear el almacenamiento SQLite
         storage = SqliteStorage(db_file=self.db_file, table_name=self.table_name)
 
-        # Configurar herramientas si están habilitadas
         tools = ALL_TOOLS if self.with_tools else None
 
-        # Crear el agente
+        # Crear el agente usando todas las configuraciones de agent_config
         self.agent = Agent(
             name="Asistente de Código",
             instructions=self.instructions,
@@ -81,11 +89,11 @@ class CodeAgent:
             storage=storage,
             session_id=self.session_id,
             tools=tools,
-            add_datetime_to_instructions=True,
-            add_history_to_messages=True,
+            add_datetime_to_instructions=agent_config.ADD_DATETIME_TO_INSTRUCTIONS,
+            add_history_to_messages=agent_config.ADD_HISTORY_TO_MESSAGES,
             num_history_runs=agent_config.NUM_HISTORY_RUNS,
-            markdown=True,
-            show_tool_calls=True,
+            markdown=agent_config.MARKDOWN,
+            show_tool_calls=agent_config.SHOW_TOOL_CALLS,
         )
 
     def chat(
@@ -832,7 +840,7 @@ class CodeAgent:
     @classmethod
     def create_with_config(
         cls,
-        api_key: str,
+        api_key: Optional[str] = None,
         session_id: Optional[str] = None,
         custom_config: Optional[Dict[str, Any]] = None,
     ) -> "CodeAgent":
@@ -840,7 +848,7 @@ class CodeAgent:
         Crea una instancia del agente con configuración personalizada.
 
         Args:
-            api_key: Clave API para el modelo.
+            api_key: Clave API para el modelo. Si no se proporciona, se toma de la configuración.
             session_id: ID de sesión opcional.
             custom_config: Configuración personalizada para sobrescribir valores predeterminados.
 
@@ -852,13 +860,16 @@ class CodeAgent:
         if custom_config:
             config.update(custom_config)
 
-        # Crear instancia
+        # Crear instancia usando todas las configuraciones disponibles
         return cls(
             session_id=session_id,
             model_id=config.get("model_id", agent_config.DEFAULT_MODEL_ID),
-            api_key=api_key,
+            api_key=api_key or config.get("api_key", agent_config.ANTHROPIC_API_KEY),
             instructions=config.get("instructions", agent_config.AGENT_INSTRUCTIONS),
-            db_file=config.get("db_file", "database/code_agent.db"),
-            table_name=config.get("table_name", "code_agent"),
+            db_file=config.get("db_file", agent_config.DB_FILE),
+            table_name=config.get("table_name", agent_config.TABLE_NAME),
             with_tools=config.get("with_tools", False),
+            temperature=config.get("temperature", agent_config.TEMPERATURE),
+            max_tokens=config.get("max_tokens", agent_config.MAX_TOKENS),
+            top_p=config.get("top_p", agent_config.TOP_P),
         )

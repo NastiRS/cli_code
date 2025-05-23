@@ -1,15 +1,14 @@
 from typing import List, Generator, Dict, Any
 
 from agno.models.anthropic import Claude
+from agno.models.message import Message as AgnoFormatMessage
 
 from src.cli_coding_agent.domain.schemas import Message
 from src.cli_coding_agent.ports.ai_model_port import AIModelPort
 
 
 class ClaudeAdapter(AIModelPort):
-    """Adaptador que implementa el modelo de IA usando Claude de Anthropic."""
-
-    def __init__(self, model_id: str = "claude-3-7-sonnet-latest", api_key: str = None):
+    def __init__(self, model_id: str, api_key: str = None):
         """
         Inicializa el adaptador para Claude.
 
@@ -25,44 +24,28 @@ class ClaudeAdapter(AIModelPort):
         self, messages: List[Message], stream: bool = True
     ) -> Generator[Dict[str, Any], None, None]:
         """
-        Genera una respuesta usando el modelo de Claude.
+        Genera una respuesta usando el modelo de Claude con streaming.
 
         Args:
             messages: Lista de mensajes de la conversación.
-            stream: Si es True, retorna la respuesta en streaming.
+            stream: Parámetro mantenido por compatibilidad, siempre usa streaming.
 
         Returns:
             Un generador que produce fragmentos de la respuesta.
         """
-        # Convertir mensajes al formato que espera Claude
-        system_message = None
-        claude_messages = []
-
-        # Extraer mensaje de sistema si existe
-        for msg in messages:
-            if msg.role == "system" and system_message is None:
-                system_message = msg.content
-            elif msg.content.strip():  # Solo incluir mensajes no vacíos
-                claude_messages.append({"role": msg.role, "content": msg.content})
-
-        # Generar la respuesta
         try:
-            # Si hay un mensaje de sistema, usarlo como system prompt
-            if system_message:
-                for response in self.model.chat(
-                    messages=claude_messages, system=system_message, stream=stream
-                ):
-                    yield response
-            else:
-                # De lo contrario, solo pasar los mensajes
-                for response in self.model.chat(
-                    messages=claude_messages, stream=stream
-                ):
-                    yield response
+            agno_messages = [
+                AgnoFormatMessage(role=msg.role, content=msg.content)
+                for msg in messages
+                if msg.content.strip()
+            ]
+
+            for response_chunk in self.model.response_stream(messages=agno_messages):
+                if response_chunk.content:
+                    yield {"content": response_chunk.content, "role": "assistant"}
+
         except Exception as e:
-            # En caso de error, lanzar una excepción más informativa
-            error_msg = f"Error en la API de Claude: {str(e)}"
-            raise ValueError(error_msg)
+            raise ValueError(f"Error en la API de Claude: {str(e)}")
 
     def get_model_id(self) -> str:
         """Retorna el ID del modelo utilizado."""

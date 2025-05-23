@@ -18,3 +18,4 @@ uv.lock
 GEMINI RECONMENDATION.txt
 test_agno_detailed.py
 test_agno_output.py
+debug_agno_streaming.py

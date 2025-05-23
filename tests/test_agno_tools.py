@@ -2,7 +2,7 @@ import os
 import platform
 
 # Importar las herramientas REALES
-from src.cli_coding_agent.agent.tools.agno_tools import (
+from src.cli_coding_agent.agent.tools.tools import (
     system_status as _system_status,
     read_file as _read_file,
     write_to_file as _write_to_file,

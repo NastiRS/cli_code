@@ -14,7 +14,7 @@ from src.cli_coding_agent.utils.env_checker import check_env_file
 from src.cli_coding_agent.adapters.storage.sqlite_adapter import SQLiteAdapter
 from src.cli_coding_agent.adapters.claude_adapter import ClaudeAdapter
 from src.cli_coding_agent.application.chat_service import ChatService
-from src.cli_coding_agent.agent import CodeAgent
+from src.cli_coding_agent.agent.agent import CodeAgent
 from src.cli_coding_agent.agent.agent_config import agent_config
 
 
