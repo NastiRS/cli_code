@@ -8,6 +8,7 @@ from rich.markdown import Markdown
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.live import Live
+from rich.text import Text
 
 from src.cli_coding_agent.utils.env_checker import check_env_file
 from src.cli_coding_agent.adapters.storage.sqlite_adapter import SQLiteAdapter
@@ -271,17 +272,12 @@ def chat(
             console.print("\n[bold green]Asistente[/bold green]")
 
             # Usar streaming para mostrar la respuesta a medida que se genera
-            respuesta_completa = ""
-
-            # Usar un único contexto Live para toda la respuesta con markdown
             with Live("", refresh_per_second=4, console=console) as live_display:
                 try:
-                    for respuesta in agent.chat(message, stream=True):
-                        if respuesta.content:
-                            fragmento = respuesta.content
-                            respuesta_completa += fragmento
-                            # Actualizar la visualización con el contenido completo hasta ahora
-                            live_display.update(Markdown(respuesta_completa))
+                    # Usar nuestra función personalizada para procesar la respuesta
+                    process_agent_response_stream(
+                        agent.chat(message, stream=True), live_display
+                    )
                 except Exception as e:
                     console.print(
                         f"[bold red]Error al obtener respuesta: {str(e)}[/bold red]"
@@ -500,6 +496,126 @@ def show_commands_help():
     )
 
     console.print(table)
+
+
+def display_tool_call_elegantly(tool_name: str, tool_args: dict = None) -> None:
+    """
+    Muestra la llamada a una herramienta de forma elegante.
+
+    Args:
+        tool_name: Nombre de la herramienta
+        tool_args: Argumentos de la herramienta (opcional)
+    """
+    # Mapeo de nombres técnicos a nombres amigables
+    tool_names_friendly = {
+        "system_status": "Estado del Sistema",
+        "read_file": "Leer Archivo",
+        "write_to_file": "Escribir Archivo",
+        "list_files": "Listar Archivos",
+        "search_files": "Buscar en Archivos",
+        "execute_command": "Ejecutar Comando",
+        "list_code_definition_names": "Analizar Código",
+        "file_search": "Buscar Archivos",
+        "search_workspace_files": "Buscar en Workspace",
+        "replace_in_file": "Reemplazar en Archivo",
+        "ask_followup_question": "Hacer Pregunta",
+        "attempt_completion": "Finalizar Tarea",
+    }
+
+    # Emojis para cada tipo de herramienta
+    tool_emojis = {
+        "system_status": "ℹ️",
+        "read_file": "📖",
+        "write_to_file": "📝",
+        "list_files": "📁",
+        "search_files": "🔍",
+        "execute_command": "⚙️",
+        "list_code_definition_names": "🔬",
+        "file_search": "🗂️",
+        "search_workspace_files": "🔎",
+        "replace_in_file": "✏️",
+        "ask_followup_question": "❓",
+        "attempt_completion": "✅",
+    }
+
+    friendly_name = tool_names_friendly.get(
+        tool_name, tool_name.replace("_", " ").title()
+    )
+    emoji = tool_emojis.get(tool_name, "🔧")
+
+    # Crear el texto del mensaje
+    message_text = Text()
+    message_text.append(f"{emoji} ", style="bold yellow")
+    message_text.append("Llamando a la herramienta ", style="cyan")
+    message_text.append(friendly_name, style="bold cyan")
+    message_text.append("...", style="cyan")
+
+    # Mostrar el panel
+    console.print()
+    console.print(
+        Panel(message_text, style="cyan", border_style="cyan", padding=(0, 1))
+    )
+
+
+def process_agent_response_stream(agent_response_stream, live_display):
+    """
+    Procesa el stream de respuestas del agente con soporte nativo para tool calls de Agno.
+    Maneja las respuestas duplicadas que Agno puede enviar y muestra las tool calls.
+
+    Args:
+        agent_response_stream: Stream de respuestas del agente
+        live_display: Objeto Live para actualizar la pantalla
+
+    Returns:
+        str: Respuesta completa del agente
+    """
+    seen_tool_calls = set()  # Para evitar mostrar tool calls duplicadas
+    all_contents = []  # Guardar todos los contenidos únicos
+
+    for respuesta in agent_response_stream:
+        # Detectar y mostrar tool calls cuando comienzan
+        if (
+            hasattr(respuesta, "event")
+            and respuesta.event == "ToolCallStarted"
+            and hasattr(respuesta, "tools")
+            and respuesta.tools
+        ):
+            for tool in respuesta.tools:
+                if isinstance(tool, dict) and "tool_name" in tool:
+                    tool_name = tool["tool_name"]
+                    tool_args = tool.get("tool_args", {})
+                    tool_id = tool.get("tool_call_id", "")
+
+                    # Evitar mostrar la misma tool call múltiples veces
+                    tool_signature = f"{tool_name}:{tool_id}"
+                    if tool_signature not in seen_tool_calls:
+                        seen_tool_calls.add(tool_signature)
+
+                        # Pausar la visualización live para mostrar la tool call
+                        live_display.stop()
+                        display_tool_call_elegantly(tool_name, tool_args)
+                        live_display.start()
+
+        # Recopilar contenidos únicos
+        if hasattr(respuesta, "content") and respuesta.content:
+            content = respuesta.content.strip()
+            if content and content not in all_contents:
+                all_contents.append(content)
+
+    # Encontrar el contenido más completo (normalmente el último y más largo)
+    if all_contents:
+        # Buscar el contenido que contiene más información
+        final_content = max(all_contents, key=len)
+
+        # Actualizar la visualización con el contenido final
+        try:
+            live_display.update(Markdown(final_content))
+        except Exception:
+            live_display.update(final_content)
+
+        return final_content
+
+    return ""
 
 
 def main():

@@ -5,10 +5,16 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
+.ruff_cache/
 
 # Virtual environments
 .venv
 database/
 uv.lock
 .env
+
+# Other files
 GEMINI RECONMENDATION.txt
+test_agno_detailed.py
+test_agno_output.py

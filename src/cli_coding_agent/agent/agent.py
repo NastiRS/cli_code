@@ -9,11 +9,7 @@ from agno.models.anthropic import Claude
 from agno.storage.sqlite import SqliteStorage
 
 from src.cli_coding_agent.agent.agent_config import agent_config
-from src.cli_coding_agent.agent.tools import (
-    get_system_info,
-    count_lines_of_code,
-    check_internet_connection,
-)
+from src.cli_coding_agent.agent.tools.agno_tools import ALL_TOOLS
 
 
 class CodeAgent:
@@ -75,11 +71,7 @@ class CodeAgent:
         storage = SqliteStorage(db_file=self.db_file, table_name=self.table_name)
 
         # Configurar herramientas si están habilitadas
-        tools = (
-            [get_system_info, count_lines_of_code, check_internet_connection]
-            if self.with_tools
-            else None
-        )
+        tools = ALL_TOOLS if self.with_tools else None
 
         # Crear el agente
         self.agent = Agent(
@@ -93,6 +85,7 @@ class CodeAgent:
             add_history_to_messages=True,
             num_history_runs=agent_config.NUM_HISTORY_RUNS,
             markdown=True,
+            show_tool_calls=True,
         )
 
     def chat(
@@ -108,33 +101,9 @@ class CodeAgent:
         Returns:
             Generador que produce fragmentos de la respuesta.
         """
-        # Utilizar directamente el agente de Agno para el chat y aplicar las transformaciones necesarias
+        # Utilizar directamente el agente de Agno sin procesamiento complejo
+        # Agno maneja automáticamente las tool calls y el formateo
         for response in self.agent.run(message=message, stream=stream):
-            # Ver si es una respuesta que tiene un resultado formateado de herramienta
-            # y utilizar ese resultado directamente en lugar del texto original
-            if (
-                hasattr(response, "content")
-                and response.content
-                and "formatted_result" in response.content
-            ):
-                try:
-                    # Si contiene un resultado formateado (desde nuestras herramientas personalizadas),
-                    # reemplazamos el contenido con ese formato
-                    import re
-
-                    pattern = r'"formatted_result":\s*"([^"]*)"'
-                    match = re.search(pattern, response.content)
-                    if match:
-                        formatted_text = match.group(1)
-                        # Escapar caracteres especiales
-                        formatted_text = formatted_text.replace("\\n", "\n")
-                        # Reemplazar el contenido con el resultado formateado
-                        response.content = formatted_text
-                except Exception:
-                    # Si hay un error al extraer/procesar, mantener el contenido original
-                    pass
-
-            # Entregar la respuesta procesada
             yield response
 
     def set_session_name(self, name: str) -> None:
