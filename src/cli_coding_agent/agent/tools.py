@@ -1,7 +1,6 @@
 from typing import Dict, Any, List, Optional, Callable, TypeVar, cast
 import os
 import platform
-import sys
 import socket
 import time
 import functools
@@ -77,31 +76,12 @@ def get_system_info() -> Dict[str, str]:
     """
     info = {
         "os": platform.system(),
-        "os_version": platform.version(),
-        "python_version": sys.version,
-        "python_implementation": platform.python_implementation(),
         "platform": platform.platform(),
         "machine": platform.machine(),
         "processor": platform.processor(),
     }
 
-    # Formatear el resultado para mejor visualización
-    result = f"""## Información del Sistema
-
-* **Sistema Operativo**: {info["os"]}
-* **Versión del SO**: {info["os_version"]}
-* **Plataforma**: {info["platform"]}
-* **Arquitectura**: {info["machine"]}
-* **Procesador**: {info["processor"]}
-
-## Información de Python
-
-* **Versión**: {info["python_version"].split()[0]}
-* **Implementación**: {info["python_implementation"]}
-"""
-
-    # Incluir tanto el texto formateado como los datos para que el modelo tenga acceso a ambos
-    return {"data": info, "formatted_result": result}
+    return {"data": info}
 
 
 @tool()

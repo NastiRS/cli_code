@@ -4,11 +4,9 @@ Este directorio contiene los tests automatizados para las herramientas del CLI C
 
 ## Estructura de archivos
 
-- **`__init__.py`** - Hace del directorio un paquete Python
 - **`conftest.py`** - Configuración y fixtures compartidas para pytest
 - **`sandbox.py`** - Archivo de ejemplo que las herramientas pueden leer/editar
 - **`test_agno_tools.py`** - Tests principales que usan las herramientas REALES (extrae funciones de decorador `@tool`)
-- **`README.md`** - Este archivo
 
 ## Herramientas probadas
 
@@ -41,10 +39,6 @@ pytest tests/
 # O con más detalle
 pytest tests/ -v
 
-# Con coverage
-pytest tests/ --cov=src/cli_coding_agent/agent/tools/
-```
-
 ### Ejecutar tests específicos
 
 ```bash
@@ -61,18 +55,10 @@ pytest tests/test_agno_tools.py::TestIntegration -v
 ### Opciones útiles
 
 ```bash
-# Mostrar prints durante los tests
-pytest tests/ -s
 
 # Parar en el primer fallo
 pytest tests/ -x
 
-# Mostrar las llamadas más lentas
-pytest tests/ --durations=10
-
-# Ejecutar en paralelo (requiere pytest-xdist)
-pytest tests/ -n auto
-```
 
 ## Tipos de tests
 
@@ -129,34 +115,3 @@ Para añadir nuevos tests:
 3. Sigue el patrón Arrange-Act-Assert
 4. Incluye docstrings descriptivos
 5. Maneja tanto casos exitosos como de error
-
-### Ejemplo de nuevo test
-
-```python
-def test_nueva_funcionalidad(self, temp_dir):
-    """Test que verifica nueva funcionalidad."""
-    # Arrange
-    test_data = "datos de prueba"
-    
-    # Act
-    result = nueva_herramienta(test_data)
-    
-    # Assert
-    assert isinstance(result, str)
-    assert "expectativa" in result
-```
-
-## Troubleshooting
-
-### Error: ModuleNotFoundError
-Si obtienes errores de importación, ejecuta desde la raíz del proyecto:
-```bash
-cd /ruta/al/proyecto
-python -m pytest tests/
-```
-
-### Tests fallan en Windows/Linux
-Algunos tests pueden comportarse diferente según el OS. Los tests están diseñados para manejar estas diferencias automáticamente.
-
-### Permisos de archivos
-Si hay errores de permisos, asegúrate de que pytest tenga permisos para crear archivos temporales en el sistema. 

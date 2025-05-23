@@ -1,20 +1,7 @@
-"""
-Tests para las herramientas del CLI Code Agent (agno_tools.py)
-
-Este archivo contiene tests para cada una de las 7 herramientas:
-1. system_status
-2. read_file
-3. write_to_file
-4. list_files
-5. execute_command
-6. search_files
-7. attempt_completion
-"""
-
 import os
 import platform
 
-# Importar las herramientas REALES con decorador @tool
+# Importar las herramientas REALES
 from src.cli_coding_agent.agent.tools.agno_tools import (
     system_status as _system_status,
     read_file as _read_file,
@@ -50,12 +37,10 @@ class TestSystemStatus:
 
         # Verificar que contiene información básica
         assert "Sistema Operativo" in result
-        assert "Python" in result
         assert "Directorio de trabajo" in result
 
         # Verificar que contiene información del sistema real
         assert platform.system() in result
-        assert platform.python_version() in result
 
     def test_system_status_contains_memory_info(self):
         """Test que verifica que system_status contiene información de memoria"""

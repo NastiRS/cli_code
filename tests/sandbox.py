@@ -73,11 +73,3 @@ Contiene palabras clave como: BUSCAR, encontrar, localizar.
 También tiene números: 123, 456, 789.
 Y algunos símbolos especiales: @#$%&*
 """
-
-if __name__ == "__main__":
-    # Código de ejemplo para ejecutar
-    calc = CalculadoraSimple()
-    print(saludar("Usuario de Prueba"))
-    print(f"2 + 3 = {calc.sumar(2, 3)}")
-    print(f"10 - 4 = {calc.restar(10, 4)}")
-    print("Historial:", calc.obtener_historial())

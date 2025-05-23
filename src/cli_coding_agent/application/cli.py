@@ -570,7 +570,8 @@ def process_agent_response_stream(agent_response_stream, live_display):
         str: Respuesta completa del agente
     """
     seen_tool_calls = set()  # Para evitar mostrar tool calls duplicadas
-    all_contents = []  # Guardar todos los contenidos únicos
+    accumulated_content = ""  # Contenido acumulado de RunResponse
+    has_tools = False  # Flag para detectar si esta sesión usa herramientas
 
     for respuesta in agent_response_stream:
         # Detectar y mostrar tool calls cuando comienzan
@@ -580,6 +581,7 @@ def process_agent_response_stream(agent_response_stream, live_display):
             and hasattr(respuesta, "tools")
             and respuesta.tools
         ):
+            has_tools = True  # Marcar que esta sesión tiene herramientas
             for tool in respuesta.tools:
                 if isinstance(tool, dict) and "tool_name" in tool:
                     tool_name = tool["tool_name"]
@@ -596,26 +598,38 @@ def process_agent_response_stream(agent_response_stream, live_display):
                         display_tool_call_elegantly(tool_name, tool_args)
                         live_display.start()
 
-        # Recopilar contenidos únicos
+        # Procesar contenido: concatenar fragmentos de RunResponse
         if hasattr(respuesta, "content") and respuesta.content:
-            content = respuesta.content.strip()
-            if content and content not in all_contents:
-                all_contents.append(content)
+            content = respuesta.content
+            event = getattr(respuesta, "event", "RunResponse")
 
-    # Encontrar el contenido más completo (normalmente el último y más largo)
-    if all_contents:
-        # Buscar el contenido que contiene más información
-        final_content = max(all_contents, key=len)
+            # Solo procesar RunResponse (respuestas del modelo)
+            # Ignorar ToolCallCompleted (resultados crudos de herramientas)
+            if event == "RunResponse":
+                # Concatenar todos los fragmentos de RunResponse
+                accumulated_content += content
 
-        # Actualizar la visualización con el contenido final
+                # Solo actualizar en tiempo real si NO hay herramientas
+                # Para chat con herramientas: mostrar solo al final para evitar duplicación
+                if not has_tools:
+                    try:
+                        live_display.update(Markdown(accumulated_content))
+                    except Exception:
+                        live_display.update(accumulated_content)
+
+    # Mostrar el contenido final para sesiones con herramientas
+    if has_tools and accumulated_content:
         try:
-            live_display.update(Markdown(final_content))
+            live_display.update(Markdown(accumulated_content))
         except Exception:
-            live_display.update(final_content)
+            live_display.update(accumulated_content)
 
-        return final_content
+    # SEGURIDAD: Nunca retornar una cadena vacía para evitar errores de API
+    # Si por alguna razón no hay contenido, retornar un mensaje mínimo
+    if not accumulated_content.strip():
+        return "..."  # Mensaje mínimo para evitar errores de API
 
-    return ""
+    return accumulated_content
 
 
 def main():
