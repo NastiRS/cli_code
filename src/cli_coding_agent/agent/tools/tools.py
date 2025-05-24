@@ -1,5 +1,6 @@
 """
-Herramientas del CLI Agent usando el decorador @tool nativo de Agno
+Herramientas simplificadas para el CLI Agent usando el formato nativo de agno
+Incluye las mejores funcionalidades de las herramientas fragmentadas pero en formato simple
 """
 
 import os
@@ -9,6 +10,22 @@ import psutil
 from typing import Optional
 
 from agno.tools import tool
+
+# Importaciones opcionales para funcionalidades avanzadas
+try:
+    import PyPDF2
+    import fitz  # PyMuPDF
+
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
+try:
+    from docx import Document
+
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 
 @tool(show_result=True)
@@ -104,7 +121,7 @@ def system_status() -> str:
 
 @tool(show_result=True)
 def read_file(file_path: str) -> str:
-    """Lee el contenido de un archivo de texto."""
+    """Lee el contenido de un archivo (texto, PDF o DOCX)."""
     try:
         # Convertir a ruta absoluta si es relativa
         if not os.path.isabs(file_path):
@@ -118,40 +135,97 @@ def read_file(file_path: str) -> str:
         if not os.path.isfile(file_path):
             return f"Error: '{file_path}' no es un archivo."
 
-        # Intentar leer el archivo con diferentes codificaciones
-        encodings = ["utf-8", "utf-16", "latin-1", "cp1252"]
+        # Detectar tipo de archivo
+        file_extension = os.path.splitext(file_path)[1].lower()
 
-        for encoding in encodings:
-            try:
-                with open(file_path, "r", encoding=encoding) as f:
-                    content = f.read()
+        # Leer según el tipo
+        if file_extension == ".pdf":
+            content = _read_pdf_file(file_path)
+        elif file_extension == ".docx":
+            content = _read_docx_file(file_path)
+        else:
+            content = _read_text_file(file_path)
 
-                # Información del archivo
-                file_size = os.path.getsize(file_path)
-                lines_count = content.count("\n") + 1 if content else 0
+        # Información del archivo
+        file_size = os.path.getsize(file_path)
+        lines_count = content.count("\n") + 1 if content else 0
 
-                return f"""## Contenido de {os.path.basename(file_path)}
+        return f"""## Contenido de {os.path.basename(file_path)}
 
 **Archivo:** {file_path}
 **Tamaño:** {file_size} bytes
 **Líneas:** {lines_count}
+**Tipo:** {file_extension or "texto"}
 
 ```
 {content}
 ```"""
 
-            except UnicodeDecodeError:
-                continue
-
-        return f"Error: No se pudo leer el archivo '{file_path}' con ninguna codificación compatible."
-
     except Exception as e:
         return f"Error leyendo archivo: {str(e)}"
 
 
+def _read_text_file(file_path: str) -> str:
+    """Lee un archivo de texto con detección automática de encoding"""
+    encodings = ["utf-8", "utf-16", "latin-1", "cp1252"]
+
+    for encoding in encodings:
+        try:
+            with open(file_path, "r", encoding=encoding) as f:
+                return f.read()
+        except UnicodeDecodeError:
+            continue
+
+    # Si ningún encoding funciona, leer como binario y decodificar con errores
+    with open(file_path, "rb") as f:
+        raw_content = f.read()
+        return raw_content.decode("utf-8", errors="replace")
+
+
+def _read_pdf_file(file_path: str) -> str:
+    """Lee contenido de un archivo PDF"""
+    if not PDF_AVAILABLE:
+        return "[PDF no soportado - instale PyPDF2 y PyMuPDF con: pip install PyPDF2 PyMuPDF]"
+
+    try:
+        # Intentar con PyMuPDF primero (mejor para texto complejo)
+        doc = fitz.open(file_path)
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        doc.close()
+        return text
+    except Exception:
+        try:
+            # Fallback a PyPDF2
+            with open(file_path, "rb") as f:
+                pdf_reader = PyPDF2.PdfReader(f)
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text()
+                return text
+        except Exception as e:
+            return f"[Error leyendo PDF: {str(e)}]"
+
+
+def _read_docx_file(file_path: str) -> str:
+    """Lee contenido de un archivo DOCX"""
+    if not DOCX_AVAILABLE:
+        return "[DOCX no soportado - instale python-docx con: pip install python-docx]"
+
+    try:
+        doc = Document(file_path)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text
+    except Exception as e:
+        return f"[Error leyendo DOCX: {str(e)}]"
+
+
 @tool(show_result=True)
 def write_to_file(file_path: str, content: str) -> str:
-    """Escribe contenido a un archivo."""
+    """Escribe contenido a un archivo, creando directorios si es necesario."""
     try:
         # Convertir a ruta absoluta si es relativa
         if not os.path.isabs(file_path):
@@ -268,7 +342,7 @@ def list_files(
 
 @tool(show_result=True)
 def execute_command(command: str, working_directory: Optional[str] = None) -> str:
-    """Ejecuta un comando en el terminal."""
+    """Ejecuta un comando en el terminal de forma segura."""
     try:
         # Comandos peligrosos que no se deben ejecutar
         dangerous_commands = [
@@ -430,7 +504,7 @@ def attempt_completion(result: str) -> str:
 ✅ El agente ha completado su tarea. ¿Necesita algo más?"""
 
 
-# Lista de todas las herramientas para facilitar el registro
+# Lista de todas las herramientas para facilitar el uso
 ALL_TOOLS = [
     system_status,
     read_file,

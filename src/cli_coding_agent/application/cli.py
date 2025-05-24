@@ -1,6 +1,6 @@
 import typer
 import sys
-from typing import Optional, List, Literal
+from typing import Optional, Literal
 
 from rich.console import Console
 from rich.panel import Panel
@@ -11,112 +11,35 @@ from rich.live import Live
 from rich.text import Text
 
 from src.cli_coding_agent.utils.env_checker import check_env_file
-from src.cli_coding_agent.adapters.storage.sqlite_adapter import SQLiteAdapter
-from src.cli_coding_agent.adapters.claude_adapter import ClaudeAdapter
-from src.cli_coding_agent.application.chat_service import ChatService
 from src.cli_coding_agent.agent.agent import CodeAgent
-from src.cli_coding_agent.agent.agent_config import agent_config
 
 
 app = typer.Typer(help="Chat con el agente de código")
 console = Console()
 
 
-def get_chat_service(
-    session_id: Optional[str] = None,
-    nuevo: bool = False,
-    db_file: str = agent_config.DB_FILE,
-    table_name: str = agent_config.TABLE_NAME,
-    command_type: Literal["chat", "other"] = "other",
-) -> ChatService:
-    """
-    Obtiene una instancia de ChatService configurada.
-
-    Args:
-        session_id: ID de sesión opcional.
-        nuevo: Si es True, crea una nueva sesión incluso si se proporciona un ID.
-        db_file: Ruta al archivo de base de datos.
-        table_name: Nombre de la tabla en la base de datos.
-        command_type: Tipo de comando que está solicitando el servicio.
-            - "chat": Permite crear nuevas sesiones si session_id es None.
-            - "other": No crea nuevas sesiones, solo utiliza sesiones existentes.
-
-    Returns:
-        Una instancia configurada de ChatService.
-    """
-    storage = SQLiteAdapter(db_file=db_file, table_name=table_name)
-    model = ClaudeAdapter(
-        model_id=agent_config.DEFAULT_MODEL_ID, api_key=agent_config.ANTHROPIC_API_KEY
-    )
-
-    # Si es una solicitud para una nueva sesión, ignoramos cualquier ID previo
-    if nuevo:
-        session_id = None
-
-    # Crear y retornar el servicio con los parámetros adecuados
-    return ChatService(
-        storage=storage,
-        ai_model=model,
-        instructions=agent_config.AGENT_INSTRUCTIONS,
-        session_id=session_id,
-        num_history_runs=agent_config.NUM_HISTORY_RUNS,
-        command_type=command_type,
-    )
-
-
 def get_code_agent(
     session_id: Optional[str] = None,
     nuevo: bool = False,
-    db_file: str = agent_config.DB_FILE,
-    table_name: str = agent_config.TABLE_NAME,
     with_tools: bool = False,
     command_type: Literal["chat", "other"] = "other",
 ) -> CodeAgent:
     """
-    Obtiene una instancia de CodeAgent configurada.
-
-    Args:
-        session_id: ID de sesión opcional.
-        nuevo: Si es True, crea una nueva sesión incluso si se proporciona un ID.
-        db_file: Ruta al archivo de base de datos.
-        table_name: Nombre de la tabla en la base de datos.
-        with_tools: Si se deben habilitar las herramientas para el agente.
-        command_type: Tipo de comando que está solicitando el agente.
-            - "chat": Permite crear nuevas sesiones si session_id es None.
-            - "other": No crea nuevas sesiones, solo utiliza sesiones existentes.
-
-    Returns:
-        Una instancia configurada de CodeAgent.
+    Obtiene una instancia del agente de código.
     """
-    # Si es una solicitud para una nueva sesión, ignoramos cualquier ID previo
+    # Manejar nuevo: crear nueva sesión o usar existente
     if nuevo:
-        session_id = None
+        session_id = None  # Forzar nueva sesión
 
-    # Si no es chat y no hay session_id, no crear un agent
+    # Si no es chat y no hay session_id, crear agente temporal
     if command_type != "chat" and not session_id:
-        # En este caso, creamos un agente con una sesión temporal
-        # Solo para acceder a sus métodos, pero no para chatear
-        agent = CodeAgent(
-            session_id="temp_"
-            + str(sys.maxsize),  # ID temporal que no debería colisionar
-            model_id=agent_config.DEFAULT_MODEL_ID,
-            api_key=agent_config.ANTHROPIC_API_KEY,
-            instructions=agent_config.AGENT_INSTRUCTIONS,
-            db_file=db_file,
-            table_name=table_name,
-            with_tools=with_tools,
-        )
-    else:
-        # Crear un agente normal
-        agent = CodeAgent(
-            session_id=session_id,
-            model_id=agent_config.DEFAULT_MODEL_ID,
-            api_key=agent_config.ANTHROPIC_API_KEY,
-            instructions=agent_config.AGENT_INSTRUCTIONS,
-            db_file=db_file,
-            table_name=table_name,
-            with_tools=with_tools,
-        )
+        session_id = "temp_" + str(sys.maxsize)  # ID temporal
+
+    # Crear agente
+    agent = CodeAgent(
+        session_id=session_id,
+        with_tools=with_tools,
+    )
 
     return agent
 
@@ -127,15 +50,6 @@ def chat(
         None, "--session", "-s", help="ID de sesión"
     ),
     nuevo: bool = typer.Option(False, "--nuevo", "-n", help="Iniciar nueva sesión"),
-    db_file: str = typer.Option(
-        agent_config.DB_FILE, "--db", help="Archivo de base de datos"
-    ),
-    table_name: str = typer.Option(
-        agent_config.TABLE_NAME, "--table", help="Nombre de tabla"
-    ),
-    exit_words: List[str] = typer.Option(
-        ["salir", "exit", "quit"], help="Palabras para salir"
-    ),
     with_tools: bool = typer.Option(
         False, "--tools", help="Habilitar herramientas para el agente"
     ),
@@ -147,8 +61,6 @@ def chat(
     agent = get_code_agent(
         session_id=session_id,
         nuevo=nuevo,
-        db_file=db_file,
-        table_name=table_name,
         with_tools=with_tools,
         command_type="chat",
     )
@@ -291,12 +203,6 @@ def chat(
 
 @app.command()
 def session(
-    db_file: str = typer.Option(
-        agent_config.DB_FILE, "--db", help="Archivo de base de datos"
-    ),
-    table_name: str = typer.Option(
-        agent_config.TABLE_NAME, "--table", help="Nombre de tabla"
-    ),
     list_sessions: bool = typer.Option(
         False, "--list", "-l", help="Listar todas las sesiones"
     ),
@@ -327,7 +233,7 @@ def session(
         clicode session --delete-all --yes
         clicode session --messages ID --limit 20
     """
-    agent = get_code_agent(db_file=db_file, table_name=table_name, command_type="other")
+    agent = get_code_agent(command_type="other")
 
     # Validar que al menos se proporcione una acción
     if not any([list_sessions, delete_id, delete_all, messages_id]):
@@ -520,6 +426,7 @@ def display_tool_call_elegantly(tool_name: str, tool_args: dict = None) -> None:
         "replace_in_file": "Reemplazar en Archivo",
         "ask_followup_question": "Hacer Pregunta",
         "attempt_completion": "Finalizar Tarea",
+        "think": "Pensar",
     }
 
     # Emojis para cada tipo de herramienta
@@ -536,6 +443,7 @@ def display_tool_call_elegantly(tool_name: str, tool_args: dict = None) -> None:
         "replace_in_file": "✏️",
         "ask_followup_question": "❓",
         "attempt_completion": "✅",
+        "think": "🧠",
     }
 
     friendly_name = tool_names_friendly.get(

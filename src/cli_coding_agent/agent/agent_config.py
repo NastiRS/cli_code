@@ -8,13 +8,17 @@ class AgentConfigSettings(BaseSettings):
 
     # API keys
     ANTHROPIC_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
 
     # Configuración de base de datos
     DB_FILE: str = "database/code_agent.db"
     TABLE_NAME: str = "code_agent"
 
     # Modelo base a utilizar
-    DEFAULT_MODEL_ID: str = "claude-sonnet-4-20250514"
+    ANTHROPIC_MODEL_ID: str = "claude-sonnet-4-20250514"
+    OPENROUTER_MODEL_ID: str = "gpt-4.1-mini"
+    MAX_MODE: bool = False
+    REASONING: bool = True
 
     # Número de interacciones de historial a incluir en cada consulta
     NUM_HISTORY_RUNS: int = 15
